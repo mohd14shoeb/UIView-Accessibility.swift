@@ -69,7 +69,17 @@ func tableSectionheaderContext() -> String {
         }
         return nil
     }
-    
+
+ // MARK: - Helpers
+    private func ancestorConforming<T>(to type: T.Type) -> T? {
+        var v: UIView? = self
+        while let view = v {
+            if let match = view as? T { return match }
+            v = view.superview
+        }
+        return nil
+    }
+
     private func parentViewController() -> UIViewController? {
         var responder: UIResponder? = self
         while let r = responder {
