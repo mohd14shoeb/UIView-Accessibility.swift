@@ -1,0 +1,104 @@
+import UIKit
+
+extension UIView {
+    func screenContext() -> String {
+        if let vc = self.parentViewController() {
+            return "Screen: \(String(describing: type(of: vc)))"
+        }
+        return ""
+    }
+    
+    func tableContext() -> String {
+        if let tableCell = self.ancestor(ofType: UITableViewCell.self),
+           let tableView = tableCell.superview as? UITableView,
+           let indexPath = tableView.indexPath(for: tableCell) {
+            return "\(self.screenContext()), Section \(indexPath.section), Row \(indexPath.row), TableCell \(String(describing: type(of: tableCell)))"
+        }
+        return ""
+    }
+    
+    func collectionContext() -> String {
+        if let collectionCell = self.ancestor(ofType: UICollectionViewCell.self),
+           let collectionView = collectionCell.superview as? UICollectionView,
+           let indexPath = collectionView.indexPath(for: collectionCell) {
+            return "\(self.tableContext()), Item \(indexPath.item), CollectionCell \(String(describing: type(of: collectionCell)))"
+        }
+        return self.tableContext()
+    }
+    
+    func ancestor<T: UIView>(ofType type: T.Type) -> T? {
+        var v = self.superview
+        while v != nil {
+            if let t = v as? T { return t }
+            v = v?.superview
+        }
+        return nil
+    }
+    
+    private func parentViewController() -> UIViewController? {
+        var responder: UIResponder? = self
+        while let r = responder {
+            if let vc = r as? UIViewController {
+                return vc
+            }
+            responder = r.next
+        }
+        return nil
+    }
+}
+
+// MARK: - Automatic Accessibility Context
+extension UIView {
+    func applyHierarchyAccessibility(prefix: String) {
+        self.isAccessibilityElement = true
+        self.accessibilityLabel = "\(self.collectionContext()), \(prefix)"
+    }
+    
+    func updateHierarchyAccessibility(suffix: String) {
+        if let current = self.accessibilityLabel {
+            self.accessibilityLabel = "\(current): \(suffix)"
+        }
+    }
+}
+
+
+how to use :-
+
+
+// Example CustomView with Button
+class PriceView: UIView {
+    private let priceButton = UIButton(type: .system)
+    
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        priceButton.setTitle("Price", for: .normal)
+        addSubview(priceButton)
+        
+        // Automatically apply accessibility context
+        priceButton.applyHierarchyAccessibility(prefix: "PriceView, Button")
+    }
+    
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        priceButton.frame = bounds
+    }
+    
+    func configure(price: String) {
+        priceButton.setTitle(price, for: .normal)
+        priceButton.updateHierarchyAccessibility(suffix: price)
+    }
+}
+
+Out Put :-- Example VoiceOver Output
+
+If inside OrdersViewController, Section 1 Row 0 → Collection Item 2 → ProductView → Label “Shoes”:
+
+👉 VoiceOver says
+Screen: OrdersViewController, Section 1, Row 0, TableCell CustomTableCell, Item 2, CollectionCell CustomCollectionCell, ProductView, Label: Shoes
+
+If inside PriceView → Button “$30”:
+👉 VoiceOver says
+Screen: OrdersViewController, Section 1, Row 0, TableCell CustomTableCell, Item 2, CollectionCell CustomCollectionCell, PriceView, Button: $30
+
