@@ -1,5 +1,10 @@
 import UIKit
 
+protocol IndexPathStorable: AnyObject {
+    var indexPath: IndexPath? { get set }
+}
+
+
 extension UIView {
     func screenContext() -> String {
         if let vc = self.parentViewController() {
@@ -9,28 +14,58 @@ extension UIView {
     }
     
     func tableContext() -> String {
-        if let tableCell = self.ancestor(ofType: UITableViewCell.self),
-           let tableView = tableCell.superview as? UITableView,
-           let indexPath = tableView.indexPath(for: tableCell) {
-            return "\(self.screenContext()), Section \(indexPath.section), Row \(indexPath.row), TableCell \(String(describing: type(of: tableCell)))"
+        if let tableCell = self.ancestorConforming(to: IndexPathStorable.self),
+           let idx = tableCell.indexPath {
+            let typeName = String(describing: type(of: tableCell))
+            return "\(screenContext()) _ Section \(idx.section) _ Row \(idx.row) _ TableCell \(typeName)"
         }
-        return ""
+        return screenContext()
     }
     
     func collectionContext() -> String {
-        if let collectionCell = self.ancestor(ofType: UICollectionViewCell.self),
-           let collectionView = collectionCell.superview as? UICollectionView,
-           let indexPath = collectionView.indexPath(for: collectionCell) {
-            return "\(self.tableContext()), Item \(indexPath.item), CollectionCell \(String(describing: type(of: collectionCell)))"
+        if let collectionCell = self.ancestorConforming(to: IndexPathStorable.self),
+           let idx = collectionCell.indexPath {
+            let typeName = String(describing: type(of: collectionCell))
+            return "\(tableContext()) _ Item \(idx.item) _ CollectionCell \(typeName)"
         }
-        return self.tableContext()
+        return tableContext()
     }
+
+func tableHeaderContext() -> String {
+        if let tableView = self.ancestor(ofType: UITableView.self),
+           let headerView = tableView.tableHeaderView,
+           headerView.isDescendant(of: self) || self.isDescendant(of: headerView) {
+            
+            let typeName = String(describing: type(of: headerView))
+            return "\(screenContext()) _ TableHeaderView \(typeName)"
+        }
+        return screenContext()
+    }
+
+
+func tableSectionheaderContext() -> String {
+        if let header = self.ancestorConforming(to: SectionStorable.self),
+           let section = header.section {
+            let typeName = String(describing: type(of: header))
+            return "\(screenContext()) _ Header Section \(section) _ HeaderView \(typeName)"
+        }
+        
+        // If it's tableHeaderView (global, no section)
+        if let tableView = self.ancestor(ofType: UITableView.self),
+           tableView.tableHeaderView?.isDescendant(of: self) == true {
+            return "\(screenContext()) _ TableHeaderView"
+        }
+        
+        return screenContext()
+    }
+
     
-    func ancestor<T: UIView>(ofType type: T.Type) -> T? {
-        var v = self.superview
-        while v != nil {
-            if let t = v as? T { return t }
-            v = v?.superview
+    // MARK: - Helpers
+    private func ancestorConforming<T>(to type: T.Type) -> T? {
+        var v: UIView? = self
+        while let view = v {
+            if let match = view as? T { return match }
+            v = view.superview
         }
         return nil
     }
@@ -38,14 +73,13 @@ extension UIView {
     private func parentViewController() -> UIViewController? {
         var responder: UIResponder? = self
         while let r = responder {
-            if let vc = r as? UIViewController {
-                return vc
-            }
+            if let vc = r as? UIViewController { return vc }
             responder = r.next
         }
         return nil
     }
 }
+
 
 // MARK: - Automatic Accessibility Context
 extension UIView {
@@ -60,6 +94,59 @@ extension UIView {
         }
     }
 }
+
+✅ Step 1 — Protocol for Header/Footer
+protocol SectionStorable: AnyObject {
+    var section: Int? { get set }
+}
+
+✅ Step 2 — Custom Header View
+class OrdersHeaderView: UIView {
+    @IBOutlet weak var titleLabel: UILabel!
+    @IBOutlet weak var dropdownView: UIView!
+
+    func configureAccessibility() {
+        titleLabel.accessibilityLabel =
+        "\(titleLabel.tableHeaderContext()) _ HeaderLabel: \(titleLabel.text ?? "")"
+
+        dropdownView.accessibilityLabel =
+        "\(dropdownView.tableHeaderContext()) _ Dropdown"
+    }
+}
+
+✅ Step 3 — Assign Section in viewForHeaderInSection
+func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
+    guard let header = tableView.dequeueReusableHeaderFooterView(withIdentifier: "CustomHeaderView") as? CustomHeaderView else {
+        return nil
+    }
+    header.section = section
+    return header
+}
+
+
+
+✅ Step 5 — Usage in Your Dropdown View
+class DropdownView: UIView {
+    @IBOutlet weak var selectedLabel: UILabel!
+    
+    func configureAccessibility() {
+        selectedLabel.accessibilityLabel =
+        "\(selectedLabel.headerContext()) _ DropdownLabel: \(selectedLabel.text ?? "")"
+    }
+}
+
+
+
+🎤 Example Output
+
+Case 1 → Inside section header (section = 2):
+
+Screen: OrdersViewController _ Header Section 2 _ HeaderView CustomHeaderView _ DropdownLabel: Payment Method
+
+
+Case 2 → Inside global tableHeaderView:
+
+Screen: OrdersViewController _ TableHeaderView _ DropdownLabel: Filter
 
 
 how to use :-
@@ -92,13 +179,20 @@ class PriceView: UIView {
 }
 
 Out Put :-- Example VoiceOver Output
+Example Output for Multiple Table Cells
 
-If inside OrdersViewController, Section 1 Row 0 → Collection Item 2 → ProductView → Label “Shoes”:
+Suppose the label Shoes is inside:
 
-👉 VoiceOver says
-Screen: OrdersViewController, Section 1, Row 0, TableCell CustomTableCell, Item 2, CollectionCell CustomCollectionCell, ProductView, Label: Shoes
+OrdersViewController
 
-If inside PriceView → Button “$30”:
-👉 VoiceOver says
-Screen: OrdersViewController, Section 1, Row 0, TableCell CustomTableCell, Item 2, CollectionCell CustomCollectionCell, PriceView, Button: $30
+Section 1, Row 0
 
+Table Cell: CustomTableCellB
+
+Collection Item: 2
+
+Collection Cell: CustomCollectionCell
+
+It will produce:
+
+Screen: OrdersViewController _ Section 1 _ Row 0 _ TableCell CustomTableCellB _ Item 2 _ CollectionCell CustomCollectionCell _ Label: Shoes
