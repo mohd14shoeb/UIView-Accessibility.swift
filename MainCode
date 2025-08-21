@@ -148,7 +148,27 @@ class DropdownView: UIView {
     }
 }
 
+ Table
+func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+    let cell = tableView.dequeueReusableCell(withIdentifier: "SomeCell", for: indexPath)
+    
+    if var storable = cell as? IndexPathStorable {
+        storable.indexPath = indexPath
+    }
+    
+    return cell
+}
 
+// Collection inside table cell
+func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
+    let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "CustomCollectionCell", for: indexPath)
+    
+    if var storable = cell as? IndexPathStorable {
+        storable.indexPath = indexPath
+    }
+    
+    return cell
+}
 
 🎤 Example Output
 
